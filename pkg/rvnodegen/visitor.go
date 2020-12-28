@@ -28,11 +28,6 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 	for i := range objects {
 		object := objects[i].DeepCopy()
 
-		if err := v.visitOwners(object); err != nil {
-			return fmt.Errorf("unable to visit owner for (%s) %s %s: %w",
-				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
-		}
-
 		var group *string
 
 		if g := object.GroupVersionKind().Group; g != "" {
@@ -55,6 +50,12 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 			Targets: targets,
 		}
 
+		node, err := v.visitOwners(object, node)
+		if err != nil {
+			return fmt.Errorf("unable to visit owner for (%s) %s %s: %w",
+				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
+		}
+
 		if err := v.emitter.Emit(object, node); err != nil {
 			return fmt.Errorf("emit node: %w", err)
 		}
@@ -63,11 +64,11 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 	return nil
 }
 
-func (v *Visitor) visitOwners(object *unstructured.Unstructured) error {
+func (v *Visitor) visitOwners(object *unstructured.Unstructured, node GraphNode) (GraphNode, error) {
 	for _, ref := range object.GetOwnerReferences() {
 		gv, err := schema.ParseGroupVersion(ref.APIVersion)
 		if err != nil {
-			return fmt.Errorf("parse API version %q: %w", ref.APIVersion, err)
+			return GraphNode{}, fmt.Errorf("parse API version %q: %w", ref.APIVersion, err)
 		}
 
 		gvk := schema.GroupVersionKind{
@@ -78,23 +79,25 @@ func (v *Visitor) visitOwners(object *unstructured.Unstructured) error {
 
 		resource, err := v.resourceLister.Resource(gvk)
 		if err != nil {
-			return fmt.Errorf("get resource for GVK (%s): %w", gvk, err)
+			return GraphNode{}, fmt.Errorf("get resource for GVK (%s): %w", gvk, err)
 		}
 
 		owner, err := v.resourceLister.Lister(resource).ByNamespace(object.GetNamespace()).Get(ref.Name)
 		if err != nil {
-			return fmt.Errorf("get owner: %w", err)
+			return GraphNode{}, fmt.Errorf("get owner: %w", err)
 		}
 
 		u, ok := owner.(*unstructured.Unstructured)
 		if !ok {
-			return fmt.Errorf("object is not an unstructured: %T", owner)
+			return GraphNode{}, fmt.Errorf("object is not an unstructured: %T", owner)
 		}
 
 		if err := v.Visit(u); err != nil {
-			return err
+			return GraphNode{}, err
 		}
+
+		node.Targets = append(node.Targets, string(ref.UID))
 	}
 
-	return nil
+	return node, nil
 }

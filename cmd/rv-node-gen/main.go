@@ -1,17 +1,18 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
-	"github.com/davecgh/go-spew/spew"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"github.com/gorilla/mux"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -19,23 +20,31 @@ import (
 	"github.com/bryanl/rv-node-gen/pkg/rvnodegen"
 )
 
+type options struct {
+	kubeConfigPath string
+	httpAddr       string
+}
+
 func main() {
-	var kubeConfigPath string
+	o := options{}
+
 	if home := homedir.HomeDir(); home != "" {
-		flag.StringVar(&kubeConfigPath, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		flag.StringVar(&o.kubeConfigPath, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
-		flag.StringVar(&kubeConfigPath, "kubeconfig", "", "absolute path to the kubeconfig file")
+		flag.StringVar(&o.kubeConfigPath, "kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+
+	flag.StringVar(&o.httpAddr, "addr", ":8181", "HTTP listen address")
 	flag.Parse()
 
-	if err := run(kubeConfigPath); err != nil {
+	if err := run(o); err != nil {
 		log.Printf(err.Error())
 		os.Exit(1)
 	}
 }
 
-func run(kubeConfigPath string) error {
-	restConfig, err := initRestConfig(kubeConfigPath)
+func run(o options) error {
+	restConfig, err := initRestConfig(o.kubeConfigPath)
 	if err != nil {
 		return fmt.Errorf("initialize REST config: %w", err)
 	}
@@ -48,58 +57,66 @@ func run(kubeConfigPath string) error {
 		return fmt.Errorf("initialize cluster client: %w", err)
 	}
 
+	log.Print("Initializing informer manager")
 	informerManager, err := rvnodegen.NewInformerManager(client)
 	if err != nil {
 		return fmt.Errorf("create informer factory: %w", err)
 	}
+	log.Println("Informer initialized")
 
-	gvk := schema.GroupVersionKind{
-		Version: "v1",
-		Kind:    "Pod",
+	r := mux.NewRouter()
+	r.Use(configureCORS)
+
+	r.Handle("/v1/nodes", rvnodegen.NewNodeHandler(informerManager)).Methods(http.MethodGet)
+
+	srv := &http.Server{
+		Addr:    o.httpAddr,
+		Handler: r,
 	}
 
-	gvr, err := informerManager.Resource(gvk)
-	if err != nil {
-		return fmt.Errorf("get resource for gvk (%s): %w", gvk, err)
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("listener for HTTP server failed: %s", err)
+			os.Exit(1)
+		}
+	}()
+
+	log.Printf("HTTP server listening at %s", o.httpAddr)
+
+	<-done
+	log.Print("HTTP server stopped")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer func() {
+		cancel()
+	}()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown http: %w", err)
 	}
-
-	objects, err := informerManager.Lister(gvr).ByNamespace("default").List(labels.Everything())
-	if err != nil {
-		return fmt.Errorf("list pods: %w", err)
-	}
-
-	list, err := toUnstructuredSlice(objects)
-	if err != nil {
-		return err
-	}
-
-	emitter := rvnodegen.NewNodeEmitter()
-	visitor := rvnodegen.NewVisitor(emitter, informerManager)
-
-	if err := visitor.Visit(list...); err != nil {
-		return fmt.Errorf("visit objects: %w", err)
-	}
-
-	spew.Dump(emitter.Nodes())
 
 	return nil
 }
 
-func initRestConfig(kubeConfigPath string) (*restclient.Config, error) {
-	return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
-}
+func configureCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Headers:", "*")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "*")
 
-func toUnstructuredSlice(in []runtime.Object) ([]*unstructured.Unstructured, error) {
-	var out []*unstructured.Unstructured
-
-	for i := range in {
-		object, ok := in[i].(*unstructured.Unstructured)
-		if !ok {
-			return nil, fmt.Errorf("object is a %T", in[i])
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
-		out = append(out, object)
-	}
+		next.ServeHTTP(w, r)
+		return
+	})
+}
 
-	return out, nil
+func initRestConfig(kubeConfigPath string) (*restclient.Config, error) {
+	return clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 }
