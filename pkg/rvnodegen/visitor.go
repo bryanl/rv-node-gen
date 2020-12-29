@@ -5,6 +5,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
 )
 
@@ -13,6 +14,7 @@ type Visitor struct {
 	emitter          Emitter
 	lister           Lister
 	resourceVisitors []ResourceVisitor
+	visitedCache     map[types.UID]bool
 }
 
 // NewVisitor creates an instance of a Visitor.
@@ -21,6 +23,7 @@ func NewVisitor(emitter Emitter, lister Lister, resourceVisitors ...ResourceVisi
 		emitter:          emitter,
 		lister:           lister,
 		resourceVisitors: resourceVisitors,
+		visitedCache:     map[types.UID]bool{},
 	}
 	return v
 }
@@ -29,6 +32,12 @@ func NewVisitor(emitter Emitter, lister Lister, resourceVisitors ...ResourceVisi
 func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 	for i := range objects {
 		object := objects[i].DeepCopy()
+
+		if _, ok := v.visitedCache[object.GetUID()]; ok {
+			continue
+		}
+
+		v.visitedCache[object.GetUID()] = true
 
 		var group *string
 
