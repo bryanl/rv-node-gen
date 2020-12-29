@@ -6,7 +6,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// ServiceResourceVisitor visits a resource.
+// ServiceResourceVisitor visits a service resource.
 type ServiceResourceVisitor struct {
 	lister Lister
 }

@@ -20,6 +20,7 @@ func ResourceVisitorsFactory(lister Lister) []ResourceVisitor {
 	return []ResourceVisitor{
 		NewPodResourceVisitor(lister),
 		NewReplicaSetResourceVisitor(lister),
+		NewServiceAccountVisitor(lister),
 		NewServiceResourceVisitor(lister),
 	}
 }
