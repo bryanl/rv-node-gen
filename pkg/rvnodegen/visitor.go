@@ -49,7 +49,13 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 
 		var parent *string
 
-		extra := map[string]interface{}{}
+		extra := map[string]interface{}{
+			"complex": map[string]interface{}{
+				"number": 1,
+				"array":  []string{"1", "2", "3"},
+				"bool":   false,
+			},
+		}
 		var targets []string
 
 		node := GraphNode{
