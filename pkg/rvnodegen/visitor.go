@@ -10,15 +10,17 @@ import (
 
 // Visitor visits resources and emits data.
 type Visitor struct {
-	emitter        Emitter
-	resourceLister ResourceLister
+	emitter          Emitter
+	lister           Lister
+	resourceVisitors []ResourceVisitor
 }
 
 // NewVisitor creates an instance of a Visitor.
-func NewVisitor(emitter Emitter, resourceLister ResourceLister) *Visitor {
+func NewVisitor(emitter Emitter, lister Lister, resourceVisitors ...ResourceVisitor) *Visitor {
 	v := &Visitor{
-		emitter:        emitter,
-		resourceLister: resourceLister,
+		emitter:          emitter,
+		lister:           lister,
+		resourceVisitors: resourceVisitors,
 	}
 	return v
 }
@@ -56,6 +58,15 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
 		}
 
+		for _, resourceVisitor := range v.resourceVisitors {
+			if resourceVisitor.Matches(object.GroupVersionKind()) {
+				node, err = resourceVisitor.Visit(object, node, v)
+				if err != nil {
+					return fmt.Errorf("resource visitor %s: %w", resourceVisitor.Name(), err)
+				}
+			}
+		}
+
 		if err := v.emitter.Emit(object, node); err != nil {
 			return fmt.Errorf("emit node: %w", err)
 		}
@@ -77,26 +88,23 @@ func (v *Visitor) visitOwners(object *unstructured.Unstructured, node GraphNode)
 			Kind:    ref.Kind,
 		}
 
-		resource, err := v.resourceLister.Resource(gvk)
-		if err != nil {
-			return GraphNode{}, fmt.Errorf("get resource for GVK (%s): %w", gvk, err)
-		}
-
-		owner, err := v.resourceLister.Lister(resource).ByNamespace(object.GetNamespace()).Get(ref.Name)
+		owner, err := v.lister.ByNamespace(object.GetNamespace()).Get(gvk, ref.Name)
 		if err != nil {
 			return GraphNode{}, fmt.Errorf("get owner: %w", err)
 		}
 
-		u, ok := owner.(*unstructured.Unstructured)
-		if !ok {
-			return GraphNode{}, fmt.Errorf("object is not an unstructured: %T", owner)
-		}
-
-		if err := v.Visit(u); err != nil {
+		if err := v.Visit(owner); err != nil {
 			return GraphNode{}, err
 		}
 
-		node.Targets = append(node.Targets, string(ref.UID))
+		switch {
+		case isDeployment(owner):
+			node.Parent = pointer.StringPtr(string(owner.GetUID()))
+		case isDaemonSet(owner):
+			node.Parent = pointer.StringPtr(string(owner.GetUID()))
+		default:
+			node.Targets = append(node.Targets, string(ref.UID))
+		}
 	}
 
 	return node, nil

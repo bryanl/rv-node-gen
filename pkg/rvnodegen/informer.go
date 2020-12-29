@@ -7,7 +7,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic/dynamicinformer"
-	"k8s.io/client-go/tools/cache"
 )
 
 var (
@@ -17,21 +16,11 @@ var (
 	}
 )
 
-// ResourceLister is an interface for listing resources.
-type ResourceLister interface {
-	// Lister returns a lister given group/version/resource.
-	Lister(resource schema.GroupVersionResource) cache.GenericLister
-	// Resource returns a resource given a group/version/kind.
-	Resource(gvk schema.GroupVersionKind) (schema.GroupVersionResource, error)
-}
-
 // InformerManager in a manager for multiple informers.
 type InformerManager struct {
 	factory dynamicinformer.DynamicSharedInformerFactory
 	mapping map[schema.GroupVersionKind]schema.GroupVersionResource
 }
-
-var _ ResourceLister = &InformerManager{}
 
 // NewInformerManager creates an instance of InformerManager.
 func NewInformerManager(client *Client) (*InformerManager, error) {
@@ -62,8 +51,8 @@ func NewInformerManager(client *Client) (*InformerManager, error) {
 }
 
 // Lister returns a lister given a resource.
-func (im *InformerManager) Lister(resource schema.GroupVersionResource) cache.GenericLister {
-	return im.factory.ForResource(resource).Lister()
+func (im *InformerManager) Lister() Lister {
+	return newLister(im)
 }
 
 // Resource returns a resource given a group/version/kind.

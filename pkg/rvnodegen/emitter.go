@@ -42,6 +42,16 @@ func (n *NodeEmitter) Nodes() []GraphNode {
 }
 
 func isPod(object *unstructured.Unstructured) bool {
-	podGroupVersionKind := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
-	return object.GroupVersionKind().String() == podGroupVersionKind.String()
+	gvk := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
+	return object.GroupVersionKind().String() == gvk.String()
+}
+
+func isDeployment(object *unstructured.Unstructured) bool {
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
+	return object.GroupVersionKind().String() == gvk.String()
+}
+
+func isDaemonSet(object *unstructured.Unstructured) bool {
+	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "DaemonSet"}
+	return object.GroupVersionKind().String() == gvk.String()
 }

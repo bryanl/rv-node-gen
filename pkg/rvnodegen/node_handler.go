@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 )
@@ -38,15 +36,17 @@ func respondWithError(w http.ResponseWriter, err error, code int) {
 	_ = enc.Encode(resp)
 }
 
+// NodeHandler is a HTTP handler for generating nodes.
 type NodeHandler struct {
-	informerManager *InformerManager
+	lister Lister
 }
 
 var _ http.Handler = &NodeHandler{}
 
-func NewNodeHandler(informerManager *InformerManager) *NodeHandler {
+// NewNodeHandler creates an instance of NodeHandler.
+func NewNodeHandler(lister Lister) *NodeHandler {
 	nh := &NodeHandler{
-		informerManager: informerManager,
+		lister: lister,
 	}
 
 	return nh
@@ -58,28 +58,19 @@ func (nh NodeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		Kind:    "Pod",
 	}
 
-	gvr, err := nh.informerManager.Resource(gvk)
-	if err != nil {
-		respondWithError(w, fmt.Errorf("get resource for gvk (%s): %w", gvk, err), http.StatusInternalServerError)
-		return
-	}
-
-	objects, err := nh.informerManager.Lister(gvr).ByNamespace("default").List(labels.Everything())
+	objects, err := nh.lister.
+		ByNamespace("default").
+		List(gvk, labels.Everything())
 	if err != nil {
 		respondWithError(w, fmt.Errorf("list pods: %w", err), http.StatusInternalServerError)
 		return
 	}
 
-	list, err := toUnstructuredSlice(objects)
-	if err != nil {
-		respondWithError(w, err, http.StatusInternalServerError)
-		return
-	}
-
+	resourceVisitors := ResourceVisitorsFactory(nh.lister)
 	emitter := NewNodeEmitter()
-	visitor := NewVisitor(emitter, nh.informerManager)
+	visitor := NewVisitor(emitter, nh.lister, resourceVisitors...)
 
-	if err := visitor.Visit(list...); err != nil {
+	if err := visitor.Visit(objects...); err != nil {
 		respondWithError(w, fmt.Errorf("visit objects: %w", err), http.StatusInternalServerError)
 		return
 	}
@@ -89,19 +80,4 @@ func (nh NodeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(resp)
-}
-
-func toUnstructuredSlice(in []runtime.Object) ([]*unstructured.Unstructured, error) {
-	var out []*unstructured.Unstructured
-
-	for i := range in {
-		object, ok := in[i].(*unstructured.Unstructured)
-		if !ok {
-			return nil, fmt.Errorf("object is a %T", in[i])
-		}
-
-		out = append(out, object)
-	}
-
-	return out, nil
 }

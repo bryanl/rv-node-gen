@@ -67,7 +67,7 @@ func run(o options) error {
 	r := mux.NewRouter()
 	r.Use(configureCORS)
 
-	r.Handle("/v1/nodes", rvnodegen.NewNodeHandler(informerManager)).Methods(http.MethodGet)
+	r.Handle("/v1/nodes", rvnodegen.NewNodeHandler(informerManager.Lister())).Methods(http.MethodGet)
 
 	srv := &http.Server{
 		Addr:    o.httpAddr,
