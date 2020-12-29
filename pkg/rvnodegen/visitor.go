@@ -3,7 +3,9 @@ package rvnodegen
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/pointer"
@@ -67,6 +69,12 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
 		}
 
+		node, err = v.checkForOwnedPods(object, node)
+		if err != nil {
+			return fmt.Errorf("check for owned pods for (%s) %s %s: %w",
+				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
+		}
+
 		for _, resourceVisitor := range v.resourceVisitors {
 			if resourceVisitor.Matches(object.GroupVersionKind()) {
 				node, err = resourceVisitor.Visit(object, node, v)
@@ -82,6 +90,42 @@ func (v *Visitor) Visit(objects ...*unstructured.Unstructured) error {
 	}
 
 	return nil
+}
+
+func (v *Visitor) checkForOwnedPods(object *unstructured.Unstructured, node GraphNode) (GraphNode, error) {
+	pods, err := v.lister.ByNamespace(object.GetNamespace()).List(podGVK, labels.Everything())
+	if err != nil {
+		return GraphNode{}, err
+	}
+
+	var controlledPods []*unstructured.Unstructured
+	for _, pod := range pods {
+		if metav1.IsControlledBy(pod, object) {
+			controlledPods = append(controlledPods, pod)
+		}
+	}
+
+	if len(controlledPods) > 0 {
+		node.Extra["podsOk"] = len(controlledPods)
+		node.Keywords = append(node.Keywords, "podSummary")
+		pod := controlledPods[0]
+
+		serviceAccountName, _, err := unstructured.NestedString(pod.Object, "spec", "serviceAccount")
+
+		serviceAccount, err := v.lister.
+			ByNamespace(object.GetNamespace()).
+			Get(serviceAccountGVK, serviceAccountName)
+		if err != nil {
+			return GraphNode{}, err
+		}
+		node.Targets = append(node.Targets, string(serviceAccount.GetUID()))
+
+		if err := v.Visit(serviceAccount); err != nil {
+			return GraphNode{}, err
+		}
+	}
+
+	return node, nil
 }
 
 func (v *Visitor) visitOwners(object *unstructured.Unstructured, node GraphNode) (GraphNode, error) {
@@ -106,15 +150,30 @@ func (v *Visitor) visitOwners(object *unstructured.Unstructured, node GraphNode)
 			return GraphNode{}, err
 		}
 
-		switch {
-		case isDeployment(owner):
-			node.Parent = pointer.StringPtr(string(owner.GetUID()))
-		case isDaemonSet(owner):
-			node.Parent = pointer.StringPtr(string(owner.GetUID()))
-		default:
-			node.Targets = append(node.Targets, string(ref.UID))
-		}
+		node = setParent(owner, node)
+		node = setTarget(owner, node)
 	}
 
 	return node, nil
+}
+
+func ownsPods(owner *unstructured.Unstructured) bool {
+	return isDeployment(owner) || isDaemonSet(owner) || isStatefulSet(owner)
+}
+
+func setParent(owner *unstructured.Unstructured, node GraphNode) GraphNode {
+	if ownsPods(owner) {
+		node.Parent = pointer.StringPtr(string(owner.GetUID()))
+		node.Keywords = append(node.Keywords, "workloadOwner")
+	}
+
+	return node
+}
+
+func setTarget(owner *unstructured.Unstructured, node GraphNode) GraphNode {
+	if !ownsPods(owner) {
+		node.Targets = append(node.Targets, string(owner.GetUID()))
+	}
+
+	return node
 }

@@ -18,4 +18,6 @@ type GraphNode struct {
 	Extra map[string]interface{} `json:"extra,omitempty"`
 	// Targets are ids this node points to.
 	Targets []string `json:"targets,omitempty"`
+	// Keywords are keywords for the node.
+	Keywords []string `json:"keywords,omitempty"`
 }

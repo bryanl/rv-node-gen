@@ -2,7 +2,6 @@ package rvnodegen
 
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Emitter is an interface that provides a way to emit data. It is used with Visitor.
@@ -39,19 +38,4 @@ func (n *NodeEmitter) Emit(object *unstructured.Unstructured, graphNode GraphNod
 // Nodes returns the graph nodes.
 func (n *NodeEmitter) Nodes() []GraphNode {
 	return n.nodes
-}
-
-func isPod(object *unstructured.Unstructured) bool {
-	gvk := schema.GroupVersionKind{Version: "v1", Kind: "Pod"}
-	return object.GroupVersionKind().String() == gvk.String()
-}
-
-func isDeployment(object *unstructured.Unstructured) bool {
-	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}
-	return object.GroupVersionKind().String() == gvk.String()
-}
-
-func isDaemonSet(object *unstructured.Unstructured) bool {
-	gvk := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "DaemonSet"}
-	return object.GroupVersionKind().String() == gvk.String()
 }
