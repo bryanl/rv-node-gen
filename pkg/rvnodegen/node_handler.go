@@ -75,6 +75,7 @@ func (nh NodeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
 	resp := nodesResponse{Nodes: emitter.Nodes()}
 
 	enc := json.NewEncoder(w)
