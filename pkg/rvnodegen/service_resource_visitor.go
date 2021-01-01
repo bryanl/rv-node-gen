@@ -76,7 +76,7 @@ func (s *ServiceResourceVisitor) Visit(object *unstructured.Unstructured, node G
 		owners = append(owners, owner)
 	}
 
-	if err := visitor.Visit(owners...); err != nil {
+	if err := visitor.Visit(false, owners...); err != nil {
 		return GraphNode{}, err
 	}
 

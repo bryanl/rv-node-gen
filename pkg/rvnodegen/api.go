@@ -1,7 +1,10 @@
 package rvnodegen
 
 import (
+	"bufio"
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -39,6 +42,7 @@ func (a *API) Handler(ctx context.Context) *mux.Router {
 	r.Use(configureCORS)
 
 	r.Handle("/v1/nodes", NewNodeHandler(a.lister)).Methods(http.MethodGet)
+	r.Handle("/v1/ws", NewWebsocketHandler(a.lister))
 
 	return r
 }
@@ -83,6 +87,8 @@ type responseWriter struct {
 	wroteHeader bool
 }
 
+var _ http.Hijacker = &responseWriter{}
+
 func wrapResponseWriter(w http.ResponseWriter) *responseWriter {
 	return &responseWriter{ResponseWriter: w}
 }
@@ -101,4 +107,13 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.wroteHeader = true
 
 	return
+}
+
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("hijacking is not supported")
+	}
+
+	return h.Hijack()
 }

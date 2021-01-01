@@ -1,11 +1,8 @@
 package rvnodegen
 
 import (
-	"fmt"
 	"net/http"
 
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/json"
 )
 
@@ -52,31 +49,15 @@ func NewNodeHandler(lister Lister) *NodeHandler {
 	return nh
 }
 
-func (nh NodeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	gvk := schema.GroupVersionKind{
-		Version: "v1",
-		Kind:    "Pod",
-	}
-
-	objects, err := nh.lister.
-		ByNamespace("default").
-		List(gvk, labels.Everything())
+func (nh *NodeHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	nb := NewNodeBuilder(nh.lister)
+	nodes, err := nb.Build("default")
 	if err != nil {
-		respondWithError(w, fmt.Errorf("list pods: %w", err), http.StatusInternalServerError)
-		return
-	}
-
-	resourceVisitors := ResourceVisitorsFactory(nh.lister)
-	emitter := NewNodeEmitter()
-	visitor := NewVisitor(emitter, nh.lister, resourceVisitors...)
-
-	if err := visitor.Visit(objects...); err != nil {
-		respondWithError(w, fmt.Errorf("visit objects: %w", err), http.StatusInternalServerError)
-		return
+		respondWithError(w, err, http.StatusInternalServerError)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	resp := nodesResponse{Nodes: emitter.Nodes()}
+	resp := nodesResponse{Nodes: nodes}
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

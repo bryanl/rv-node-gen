@@ -20,4 +20,6 @@ type GraphNode struct {
 	Targets []string `json:"targets,omitempty"`
 	// Keywords are keywords for the node.
 	Keywords []string `json:"keywords,omitempty"`
+	// IsGroup sets this node as a group.
+	IsGroup *string `json:"isGroup,omitempty"`
 }

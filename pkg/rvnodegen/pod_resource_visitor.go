@@ -75,7 +75,7 @@ func (p *PodResourceVisitor) Visit(object *unstructured.Unstructured, node Graph
 			continue
 		}
 
-		if err := visitor.Visit(service); err != nil {
+		if err := visitor.Visit(false, service); err != nil {
 			return GraphNode{}, err
 		}
 	}

@@ -55,7 +55,7 @@ func (s *ServiceAccountVisitor) Visit(object *unstructured.Unstructured, node Gr
 			return GraphNode{}, err
 		}
 
-		if err := visitor.Visit(secret); err != nil {
+		if err := visitor.Visit(false, secret); err != nil {
 			return GraphNode{}, err
 		}
 
