@@ -42,21 +42,8 @@ func (v *Visitor) Visit(isGroup bool, objects ...*unstructured.Unstructured) err
 
 		v.visitedCache[object.GetUID()] = true
 
-		var group *string
-
-		if g := object.GroupVersionKind().Group; g != "" {
-			group = pointer.StringPtr(g)
-		}
-
 		var parent *string
 
-		extra := map[string]interface{}{
-			"complex": map[string]interface{}{
-				"number": 1,
-				"array":  []string{"1", "2", "3"},
-				"bool":   false,
-			},
-		}
 		var targets []string
 
 		var ig *string
@@ -71,12 +58,8 @@ func (v *Visitor) Visit(isGroup bool, objects ...*unstructured.Unstructured) err
 
 		node := GraphNode{
 			ID:       string(object.GetUID()),
-			Name:     object.GetName(),
-			Group:    group,
-			Version:  object.GroupVersionKind().Version,
-			Kind:     object.GroupVersionKind().Kind,
+			Label:    object.GetName(),
 			Parent:   parent,
-			Extra:    extra,
 			Targets:  targets,
 			IsGroup:  ig,
 			NodeType: nodeType,
@@ -127,8 +110,8 @@ func (v *Visitor) checkForOwnedPods(object *unstructured.Unstructured, node Grap
 	}
 
 	if len(controlledPods) > 0 {
-		node.Extra["podsOk"] = len(controlledPods)
-		node.Keywords = append(node.Keywords, "podSummary")
+		// node.Extra["podsOk"] = len(controlledPods)
+		// node.Keywords = append(node.Keywords, "podSummary")
 		pod := controlledPods[0]
 
 		serviceAccountName, _, err := unstructured.NestedString(pod.Object, "spec", "serviceAccount")
@@ -188,7 +171,6 @@ func setParent(owner *unstructured.Unstructured, node GraphNode) (GraphNode, boo
 
 	if isOwner {
 		node.Parent = pointer.StringPtr(string(owner.GetUID()))
-		node.Keywords = append(node.Keywords, "workloadOwner")
 	}
 
 	return node, isOwner
