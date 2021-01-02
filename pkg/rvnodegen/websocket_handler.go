@@ -10,17 +10,22 @@ import (
 	"github.com/bryanl/rv-node-gen/internal/log"
 )
 
+// Command is a web socket command.
 type Command struct {
-	Type    string  `json:"type"`
+	// Type is the type of command.
+	Type string `json:"type"`
+	// Payload is the command's payload.
 	Payload Payload `json:"payload"`
 
 	messageType int
 }
 
+// MessageType returns the web socket message type for the command.
 func (c *Command) MessageType() int {
 	return c.messageType
 }
 
+// CreateResponse creates a web socket response.
 func (c *Command) CreateResponse(payload Payload) WebsocketResponse {
 	return WebsocketResponse{
 		MessageType: c.messageType,
@@ -28,13 +33,18 @@ func (c *Command) CreateResponse(payload Payload) WebsocketResponse {
 	}
 }
 
+// WebsocketResponse is a web socket response.
 type WebsocketResponse struct {
-	MessageType int     `json:"messageType"`
-	Payload     Payload `json:"payload"`
+	// MessageType is the type of message.
+	MessageType int `json:"messageType"`
+	// Payload is the response payload.
+	Payload Payload `json:"payload"`
 }
 
+// Payload is a web socket response payload.
 type Payload map[string]interface{}
 
+// ParseCommand parses a web socket message and creates a command.
 func ParseCommand(messageType int, data []byte) (Command, error) {
 	var c Command
 	if err := json.Unmarshal(data, &c); err != nil {
@@ -45,6 +55,7 @@ func ParseCommand(messageType int, data []byte) (Command, error) {
 	return c, nil
 }
 
+// WebsocketHandler is a HTTP handler for handling web socket messages.
 type WebsocketHandler struct {
 	lister   Lister
 	upgrader websocket.Upgrader
@@ -52,6 +63,7 @@ type WebsocketHandler struct {
 
 var _ http.Handler = &WebsocketHandler{}
 
+// NewWebsocketHandler creates an instance of WebsocketHandler.
 func NewWebsocketHandler(lister Lister) *WebsocketHandler {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
@@ -66,6 +78,7 @@ func NewWebsocketHandler(lister Lister) *WebsocketHandler {
 	return w
 }
 
+// ServeHTTP serves the handler.
 func (h *WebsocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	commands := CommandsFactory(h.lister)
 
@@ -105,10 +118,12 @@ func (h *WebsocketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// WebsocketConn is a web socket connection.
 type WebsocketConn struct {
 	conn *websocket.Conn
 }
 
+// NewWebsocketConn creates an instance of WebsocketConn.
 func NewWebsocketConn(w http.ResponseWriter, r *http.Request, upgrader websocket.Upgrader) (*WebsocketConn, error) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -122,10 +137,12 @@ func NewWebsocketConn(w http.ResponseWriter, r *http.Request, upgrader websocket
 	return wc, nil
 }
 
+// Close closes the web socket connection.
 func (wc *WebsocketConn) Close() error {
 	return wc.conn.Close()
 }
 
+// Read reads the next message from the connection. It will block until a message is read.
 func (wc *WebsocketConn) Read() (*Command, error) {
 	messageType, message, err := wc.conn.ReadMessage()
 	if err != nil {
@@ -143,6 +160,7 @@ func (wc *WebsocketConn) Read() (*Command, error) {
 	return &c, nil
 }
 
+// Write writes a message to the web socket connection.
 func (wc *WebsocketConn) Write(r WebsocketResponse) error {
 	data, err := json.Marshal(r.Payload)
 	if err != nil {

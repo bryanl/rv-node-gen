@@ -36,7 +36,7 @@ func newLister(informerManager *InformerManager) *lister {
 func (l *lister) List(gvk schema.GroupVersionKind, selector labels.Selector) ([]*unstructured.Unstructured, error) {
 	informer, err := fetchInformer(l.informerManager, gvk)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get informer for %s: %w", gvk, err)
 	}
 
 	list, err := informer.Lister().List(selector)

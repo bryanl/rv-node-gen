@@ -86,10 +86,6 @@ func primeFactory(
 				continue
 			}
 
-			if !apiResource.Namespaced {
-				continue
-			}
-
 			resource := schema.GroupVersionResource{
 				Group:    groupVersion.Group,
 				Version:  groupVersion.Version,

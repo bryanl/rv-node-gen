@@ -6,10 +6,12 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 )
 
+// NodeBuilder builds nodes.
 type NodeBuilder struct {
 	lister Lister
 }
 
+// NewNodeBuilder creates an instance of NodeBuilder.
 func NewNodeBuilder(lister Lister) *NodeBuilder {
 	n := &NodeBuilder{
 		lister: lister,
@@ -17,6 +19,7 @@ func NewNodeBuilder(lister Lister) *NodeBuilder {
 	return n
 }
 
+// Build builds a list of nodes.
 func (n *NodeBuilder) Build(namespace string) ([]GraphNode, error) {
 	objects, err := n.lister.
 		ByNamespace(namespace).

@@ -64,25 +64,30 @@ func (v *Visitor) Visit(isGroup bool, objects ...*unstructured.Unstructured) err
 			ig = pointer.StringPtr("yes")
 		}
 
-		node := GraphNode{
-			ID:      string(object.GetUID()),
-			Name:    object.GetName(),
-			Group:   group,
-			Version: object.GroupVersionKind().Version,
-			Kind:    object.GroupVersionKind().Kind,
-			Parent:  parent,
-			Extra:   extra,
-			Targets: targets,
-			IsGroup: ig,
+		nodeType, err := detectNodeType(v.lister, object)
+		if err != nil {
+			return fmt.Errorf("detect node type: %w", err)
 		}
 
-		node, err := v.visitOwners(object, node)
+		node := GraphNode{
+			ID:       string(object.GetUID()),
+			Name:     object.GetName(),
+			Group:    group,
+			Version:  object.GroupVersionKind().Version,
+			Kind:     object.GroupVersionKind().Kind,
+			Parent:   parent,
+			Extra:    extra,
+			Targets:  targets,
+			IsGroup:  ig,
+			NodeType: nodeType,
+		}
+
+		node, err = v.visitOwners(object, node)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				continue
 			}
-			return fmt.Errorf("unable to visit owner for (%s) %s %s: %w",
-				object.GetNamespace(), object.GroupVersionKind(), object.GetName(), err)
+			return err
 		}
 
 		node, err = v.checkForOwnedPods(object, node)

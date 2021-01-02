@@ -6,27 +6,35 @@ import (
 	"time"
 )
 
+// WebsocketWriter is an interface for writing to a web socket.
 type WebsocketWriter interface {
+	// Write writes to a web socket.
 	Write(r WebsocketResponse) error
 }
 
+// CommandHandler is a handler for a command.
 type CommandHandler interface {
+	// Name is the name of the command.
 	Name() string
+	// Run runs the action that accepts a command.
 	Run(ctx context.Context, w WebsocketWriter, c Command) error
 }
 
+// CommandsFactory is a factory for generating a list of command handlers.
 func CommandsFactory(lister Lister) []CommandHandler {
 	return []CommandHandler{
 		NewWorkloadsCommand(lister),
 	}
 }
 
+// WorkloadsCommand is a workloads command.
 type WorkloadsCommand struct {
 	lister Lister
 }
 
 var _ CommandHandler = &WorkloadsCommand{}
 
+// NewWorkloadsCommand creates an instance of WorkloadsCommand.
 func NewWorkloadsCommand(lister Lister) *WorkloadsCommand {
 	w := &WorkloadsCommand{
 		lister: lister,
@@ -34,10 +42,12 @@ func NewWorkloadsCommand(lister Lister) *WorkloadsCommand {
 	return w
 }
 
+// Name returns the name of the handler.
 func (wc *WorkloadsCommand) Name() string {
 	return "workloads"
 }
 
+// Run runs the handler.
 func (wc *WorkloadsCommand) Run(ctx context.Context, w WebsocketWriter, c Command) error {
 	timer := time.NewTimer(0)
 	done := false
