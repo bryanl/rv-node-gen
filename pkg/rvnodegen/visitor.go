@@ -18,17 +18,26 @@ type Visitor struct {
 	lister           Lister
 	resourceVisitors []ResourceVisitor
 	visitedCache     map[types.UID]bool
+	healthStatus     HealthStatuser
 }
 
 // NewVisitor creates an instance of a Visitor.
-func NewVisitor(emitter Emitter, lister Lister, resourceVisitors ...ResourceVisitor) *Visitor {
+func NewVisitor(emitter Emitter, lister Lister, resourceVisitors []ResourceVisitor, options ...Option) (*Visitor, error) {
+	opts := buildOptionConfig(options...)
+
+	hs, err := opts.healthStatuserFactory(lister)
+	if err != nil {
+		return nil, fmt.Errorf("health status factor: %w", err)
+	}
+
 	v := &Visitor{
 		emitter:          emitter,
 		lister:           lister,
 		resourceVisitors: resourceVisitors,
 		visitedCache:     map[types.UID]bool{},
+		healthStatus:     hs,
 	}
-	return v
+	return v, nil
 }
 
 // Visit visits a set of objects. If the visit fails, it returns an error.
@@ -56,13 +65,19 @@ func (v *Visitor) Visit(isGroup bool, objects ...*unstructured.Unstructured) err
 			return fmt.Errorf("detect node type: %w", err)
 		}
 
+		healthStatus, err := v.healthStatus.HealthStatus(object)
+		if err != nil {
+			return fmt.Errorf("health status: %w", err)
+		}
+
 		node := GraphNode{
-			ID:       string(object.GetUID()),
-			Label:    object.GetName(),
-			Parent:   parent,
-			Targets:  targets,
-			IsGroup:  ig,
-			NodeType: nodeType,
+			ID:           string(object.GetUID()),
+			Label:        object.GetName(),
+			Parent:       parent,
+			Targets:      targets,
+			IsGroup:      ig,
+			NodeType:     nodeType,
+			HealthStatus: healthStatus,
 		}
 
 		node, err = v.visitOwners(object, node)

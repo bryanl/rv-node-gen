@@ -26,6 +26,9 @@ type GraphNode struct {
 	// NodeType is the the node type.
 	NodeType NodeType `json:"nodeType,omitempty"`
 
+	// HealthStatus is the health status.
+	HealthStatus HealthStatusType `json:"healthStatus,omitempty"`
+
 	// Parent is the node's parent. It is optional.
 	Parent *string `json:"parent,omitempty"`
 

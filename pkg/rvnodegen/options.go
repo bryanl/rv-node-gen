@@ -6,6 +6,8 @@ type optionConfig struct {
 	discoveryCacheDir string
 	httpCacheDir      string
 	discoveryTTL      time.Duration
+
+	healthStatuserFactory HealthStatuserFactory
 }
 
 func buildOptionConfig(options ...Option) optionConfig {
@@ -13,6 +15,10 @@ func buildOptionConfig(options ...Option) optionConfig {
 		discoveryCacheDir: "",
 		httpCacheDir:      "",
 		discoveryTTL:      180 * time.Second,
+		healthStatuserFactory: func(lister Lister) (HealthStatuser, error) {
+			hs := NewClusterHealthStatus(lister)
+			return hs, nil
+		},
 	}
 
 	for _, o := range options {
@@ -43,5 +49,12 @@ func HTTPCacheDir(dir string) Option {
 func DiscoveryTTL(ttl time.Duration) Option {
 	return func(o *optionConfig) {
 		o.discoveryTTL = ttl
+	}
+}
+
+// HealthStatusFactory sets the health status generator factory.
+func HealthStatusFactory(f HealthStatuserFactory) Option {
+	return func(o *optionConfig) {
+		o.healthStatuserFactory = f
 	}
 }

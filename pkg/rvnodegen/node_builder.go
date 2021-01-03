@@ -30,7 +30,10 @@ func (n *NodeBuilder) Build(namespace string) ([]GraphNode, error) {
 
 	resourceVisitors := ResourceVisitorsFactory(n.lister)
 	emitter := NewNodeEmitter()
-	visitor := NewVisitor(emitter, n.lister, resourceVisitors...)
+	visitor, err := NewVisitor(emitter, n.lister, resourceVisitors)
+	if err != nil {
+		return nil, fmt.Errorf("create visitor: %w", err)
+	}
 
 	if err := visitor.Visit(false, objects...); err != nil {
 		return nil, fmt.Errorf("visit objects: %w", err)
